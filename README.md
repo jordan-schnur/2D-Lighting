@@ -1,13 +1,15 @@
+
 # 2D Lighting
-This is my poor attempt at some 2D hard lighting. It's fairly straight forward to build
+A technique for 2D lighting using a framebuffer
+
 #### Dependencies  
 * [GLFW] for window management
-* [GLEW] for managment of OpenGL extentions
+* [GLAD] for management of OpenGL extensions
 * [GLM] for maths
 
 
 [GLFW]: http://www.glfw.org/
-[GLEW]: http://glew.sourceforge.net/
+[GLAD]: https://glad.dav1d.de/
 [GLM]: http://glm.g-truc.net/0.9.7/index.html
 
 ### Some images
