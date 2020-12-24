@@ -1,7 +1,11 @@
-#include <iostream>
-#define GLEW_STATIC
-#include <gl\glew.h>
-#include <glfw3.h>
+#include "glad.h"
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <GLFW/glfw3.h>
 #include <glm\glm.hpp>
 #include <string>
 #include <vector>
@@ -10,7 +14,7 @@
 #include <glm\gtc\matrix_transform.hpp>
 #include <algorithm>
 #include <fstream>
-
+#include <iostream>
 
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
@@ -29,13 +33,15 @@ struct Program {
 
 //Forward declaration
 void initProgram();
+GLFWwindow* window;
 Program createSceneProgram();
 Program createScreenProgram();
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-void CompileProgram(GLuint &program_id, char* vertexshader_filename, char* fragmentshader_filename);
+void CompileProgram(GLuint& program_id, const char* vertexshader_filename, const char* fragmentshader_filename);
 glm::vec3 GetIntersection(glm::vec2 Ray1, glm::vec2 Ray2, glm::vec2 Point1, glm::vec2 Point2);
 void scroll_callback(GLFWwindow* window, double x, double y);
-bool sortVec3(const glm::vec4 &i, const glm::vec4 &j) { return (i.z<j.z); }
+bool sortVec3(const glm::vec4& i, const glm::vec4& j) { return (i.z < j.z); }
+void CreateShader(GLuint& shader_object, const char* filename, GLenum shadertype);
 
 
 
@@ -54,12 +60,41 @@ static GLfloat verts[] = { 0, 0, width, 0,width, 0, width, height ,width, height
 GLfloat points[] = { 0, 0, 640, 0, 640, 360, 0, 360, 100, 150, 120, 50, 200, 80, 140, 210, 100, 200, 120, 250, 60, 300, 200, 260, 220, 150, 300, 200, 350, 320, 340, 60, 360, 40, 370, 70, 450, 190, 560, 170, 540, 270, 430, 290, 400, 95, 580, 50, 480, 150, };
 GLfloat lines[100 * 6];
 
-GLFWwindow* window;
+static const struct
+{
+	float x, y;
+	float r, g, b;
+} vertices[3] =
+{
+	{ -0.6f, -0.4f, 1.f, 0.f, 0.f },
+	{  0.6f, -0.4f, 0.f, 1.f, 0.f },
+	{   0.f,  0.6f, 0.f, 0.f, 1.f }
+};
 
+static const char* vertex_shader_text =
+"#version 110\n"
+"uniform mat4 MVP;\n"
+"attribute vec3 vCol;\n"
+"attribute vec2 vPos;\n"
+"varying vec3 color;\n"
+"void main()\n"
+"{\n"
+"    gl_Position = MVP * vec4(vPos, 0.0, 1.0);\n"
+"    color = vCol;\n"
+"}\n";
 
+static const char* fragment_shader_text =
+"#version 110\n"
+"varying vec3 color;\n"
+"void main()\n"
+"{\n"
+"    gl_FragColor = vec4(color, 1.0);\n"
+"}\n";
 
-
-
+static void error_callback(int error, const char* description)
+{
+	fprintf(stderr, "Error: %s\n", description);
+}
 
 int main() {
 
@@ -69,13 +104,13 @@ int main() {
 	Program sceneProgram = createSceneProgram();
 	Program screenProgram = createScreenProgram();
 
-	//Setup framebuffer for post processing 
+	//Setup framebuffer for post processing
 	GLuint frameBuffer;
 	glGenFramebuffers(1, &frameBuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
 
 
-	GLuint texColorBuffer;//Create multisampled texture 
+	GLuint texColorBuffer;//Create multisampled texture
 	glGenTextures(1, &texColorBuffer);
 	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texColorBuffer);
 	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 8, GL_RGB, width, height, GL_TRUE);
@@ -106,11 +141,11 @@ int main() {
 
 
 	glm::mat4 view = glm::mat4(1.0f);
-	
+
 
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetScrollCallback(window, scroll_callback);
-	
+
 	while (!glfwWindowShouldClose(window)) //Begin main game loop
 	{
 		glViewport(0, 0, width, height);
@@ -128,13 +163,13 @@ int main() {
 
 		std::vector<glm::vec4> rays = std::vector<glm::vec4>();
 		std::vector<glm::vec2> angles = std::vector<glm::vec2>();
-		
+
 
 		for (int j = 0; j < (sizeof(points) / sizeof(GLfloat)) / 2; j++) { //Load all of the angles into a vector
-			float angle = atan2(points[(j*2)+1] - mY, points[j * 2] - mX);
-			angles.push_back(glm::vec2(angle - 0.001f,1));
-			angles.push_back(glm::vec2(angle,0));
-			angles.push_back(glm::vec2(angle + 0.001f,1));
+			float angle = atan2(points[(j * 2) + 1] - mY, points[j * 2] - mX);
+			angles.push_back(glm::vec2(angle - 0.001f, 1));
+			angles.push_back(glm::vec2(angle, 0));
+			angles.push_back(glm::vec2(angle + 0.001f, 1));
 		}
 
 		for (int j = 0; j < angles.size(); j++) { //Cast rays to every point and find intersections
@@ -150,9 +185,9 @@ int main() {
 					glm::vec2(mX + dX, mY + dY),
 					glm::vec2(verts[i * 4], verts[(i * 4) + 1]),
 					glm::vec2(verts[(i * 4) + 2], verts[(i * 4) + 3]));
-				
+
 				if (intersect.z < 0) continue;
-				if (closest.z < 0 || intersect.z<closest.z) {
+				if (closest.z < 0 || intersect.z < closest.z) {
 					closest = intersect;
 				}
 			}
@@ -169,12 +204,20 @@ int main() {
 			glm::vec4 ray = rays[i];
 			int offset = 4 * numTimes; //Change offset based on if we're drawing lines or triangles
 			offset += 2;
-			glm::vec4 pRay = rays[i + 1];
 
-			if (i == rays.size() - 1){
+			glm::vec4 pRay;
+			if (i == rays.size() - 1) {
+				pRay = rays[i];
+			}
+			else {
+				pRay = rays[i + 1];
+			}
+
+
+			if (i == rays.size() - 1) {
 				pRay = rays[0];
 			}
-			
+
 
 			if (drawLines) {
 				lines[(offset + 0)] = ray.x;
@@ -193,15 +236,15 @@ int main() {
 				numTimes++;
 			}
 
-			
+
 		}
-		
+
 		angles.clear();
 		glBindBuffer(GL_ARRAY_BUFFER, sceneProgram.vbo2);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(lines), lines, GL_STREAM_DRAW); //Load the vertcies into the GPU
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		rays.clear();
-		
+
 
 
 		glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
@@ -216,26 +259,27 @@ int main() {
 		glUniform1f(glGetUniformLocation(sceneProgram.program_id, "lightSize"), lightSize);
 
 
-		if (mX > 0 && mY > 0 && mX<width && mY<height) {
+		if (mX > 0 && mY > 0 && mX < width && mY < height) {
 			if (!drawLines) { //Draw shadow
 				glUniform1i(glGetUniformLocation(sceneProgram.program_id, "isShadow"), 1);
-				glDrawArrays(GL_TRIANGLE_FAN, 0, (numTimes * 2)+1);
+				glDrawArrays(GL_TRIANGLE_FAN, 0, (numTimes * 2) + 1);
 				glUniform1i(glGetUniformLocation(sceneProgram.program_id, "isShadow"), 0);
-			} else { //Draw the lines
+			}
+			else { //Draw the lines
 				glDrawArrays(GL_LINES, 0, numTimes * 2);
 			}
-			
+
 		}
-	
-		
-		
+
+
+
 
 		//Write framebuffer into the intermediateBuffer for rendering. Bind default buffer
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, intermediateBuffer);
 		glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		
+
 
 
 		//Send uniforms for screen
@@ -243,11 +287,16 @@ int main() {
 		glUseProgram(screenProgram.program_id);
 		glUniform2f(screenProgram.uniforms.at("mouseCoords"), mousePositon_worldspace.x, mousePositon_worldspace.y);
 		glUniformMatrix4fv(glGetUniformLocation(screenProgram.program_id, "inverseMat"), 1, GL_FALSE, glm::value_ptr(inverse));
-		glUniform1i(glGetUniformLocation(screenProgram.program_id, "sizeofpoints"), pointsV2.size()/2);
-		glUniform2fv(glGetUniformLocation(screenProgram.program_id, "points"), pointsV2.size(), &pointsV2[0]);
+		if (pointsV2.size() != 0) {
+			glUniform1i(glGetUniformLocation(screenProgram.program_id, "sizeofpoints"), pointsV2.size() / 2);
+			glUniform2fv(glGetUniformLocation(screenProgram.program_id, "points"), pointsV2.size(), &pointsV2[0]);
+		}
+
+
 		if (drawLines) {
 			glUniform1i(glGetUniformLocation(screenProgram.program_id, "showPoints"), 1);
-		} else {
+		}
+		else {
 			glUniform1i(glGetUniformLocation(screenProgram.program_id, "showPoints"), 0);
 		}
 		//Send the texture from the framebuffer
@@ -263,7 +312,7 @@ int main() {
 		glBindVertexArray(sceneProgram.vao);
 		glUniform3f(sceneProgram.uniforms.at("Color"), BasicColor.r, BasicColor.g, BasicColor.b);
 		glDrawArrays(GL_LINES, 8, (sizeof(verts) / sizeof(GLfloat)) - 36);
-		
+
 
 		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			break;
@@ -272,13 +321,15 @@ int main() {
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
-	
+
 	glDeleteFramebuffers(1, &frameBuffer);
 	glDeleteFramebuffers(1, &intermediateBuffer);
-	glfwDestroyWindow(window);  
-    glfwTerminate();  
+	glfwDestroyWindow(window);
+	glfwTerminate();
 	return 0;
 }
+
+
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -296,7 +347,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 }
 
 void scroll_callback(GLFWwindow* window, double x, double y) {
-	lightSize += y*10;
+	lightSize += y * 10;
 }
 
 glm::vec3 GetIntersection(glm::vec2 Ray1, glm::vec2 Ray2, glm::vec2 Point1, glm::vec2 Point2) { //Do even more voodoo for rays! Sacrificing a chicken would have worked, but I didn't want to do that.
@@ -310,40 +361,42 @@ glm::vec3 GetIntersection(glm::vec2 Ray1, glm::vec2 Ray2, glm::vec2 Point1, glm:
 	float lineDX = Point2.x - Point1.x;
 	float lineDY = Point2.y - Point1.y;
 
-	float r_mag = sqrt(rayDX*rayDX + rayDY*rayDY);
-	float s_mag = sqrt(lineDX*lineDX + lineDY*lineDY);
+	float r_mag = sqrt(rayDX * rayDX + rayDY * rayDY);
+	float s_mag = sqrt(lineDX * lineDX + lineDY * lineDY);
 	if (rayDX / r_mag == lineDX / s_mag && rayDY / r_mag == lineDY / s_mag) {
 		// Unit vectors are the same.
 		return glm::vec3(0, 0, -1337);
 	}
 
-	float T2 = (rayDX*(linePY - rayPY) + rayDY*(rayPX - linePX)) / (lineDX*rayDY - lineDY*rayDX);
+	float T2 = (rayDX * (linePY - rayPY) + rayDY * (rayPX - linePX)) / (lineDX * rayDY - lineDY * rayDX);
 
 	float T1;
 
 	if (rayDX != 0) {
-		T1 = (linePX + lineDX*T2 - rayPX) / rayDX;
+		T1 = (linePX + lineDX * T2 - rayPX) / rayDX;
 	}
 	else {
-		T1 = (linePY + lineDY*T2 - rayPY) / rayDY;
+		T1 = (linePY + lineDY * T2 - rayPY) / rayDY;
 	}
-	if (T1 < 0) return glm::vec3(0,0, -1337);
+	if (T1 < 0) return glm::vec3(0, 0, -1337);
 	if (T2 < 0 || T2>1) return glm::vec3(0, 0, -1337);
 
 	return glm::vec3(
-		rayPX + rayDX*T1,
-		rayPY + rayDY*T1,
+		rayPX + rayDX * T1,
+		rayPY + rayDY * T1,
 		T1);
 
 
 }
 
+void BobsBurgers(GLuint& program_id, const char* vertexshader_filename, const char* fragmentshader_filename);
+
 Program createSceneProgram() {
 	Program program;
-	CompileProgram(program.program_id, "main.vert", "main.frag");
+	BobsBurgers(program.program_id, "main.vert", "main.frag");
 	glGenVertexArrays(1, &program.vao);
-	glGenVertexArrays(1,&program.vao2);
-	
+	glGenVertexArrays(1, &program.vao2);
+
 	glGenBuffers(1, &program.vbo);
 	glGenBuffers(1, &program.vbo2);
 
@@ -368,7 +421,7 @@ Program createSceneProgram() {
 	glBindVertexArray(program.vao2);
 	glBindBuffer(GL_ARRAY_BUFFER, program.vbo2);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float)*2, 0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, 0);
 	glBindVertexArray(0);
 
 
@@ -379,11 +432,10 @@ Program createSceneProgram() {
 
 Program createScreenProgram() {
 	Program program;
-	CompileProgram(program.program_id, "post.vert", "post.frag");
+	BobsBurgers(program.program_id, "post.vert", "post.frag");
 	glGenVertexArrays(1, &program.vao);
 	glBindVertexArray(program.vao);
 	glGenBuffers(1, &program.vbo);
-
 
 	glBindBuffer(GL_ARRAY_BUFFER, program.vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
@@ -395,16 +447,16 @@ Program createScreenProgram() {
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
-	
+
 	glUseProgram(program.program_id);
 	program.uniforms.insert(std::pair<std::string, GLuint>("mouseCoords", glGetUniformLocation(program.program_id, "mouseCoords")));
-	glUniform2f(program.uniforms.at("mouseCoords"), 0.0,0.0);
+	glUniform2f(program.uniforms.at("mouseCoords"), 0.0, 0.0);
 	glBindVertexArray(0);
 	return program;
 }
 
-std::string LoadFile(char* filename) {
-	//TODO: Make more efficient. 
+std::string LoadFile(const char* filename) {
+	//TODO: Make more efficient.
 	std::string text = "";
 	std::string line = "";
 	std::ifstream f(filename);
@@ -421,15 +473,21 @@ std::string LoadFile(char* filename) {
 	else std::cout << "Failed to load file: " << filename << std::endl; return "";
 }
 
-void initProgram() {
-	if (!glfwInit()) {
-		exit(-1);
-	}
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); //Request a specific OpenGL version  
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3); //Request a specific OpenGL version  
+void initProgram() {
+
+	GLuint vertex_buffer, vertex_shader, fragment_shader, program;
+	GLint mvp_location, vpos_location, vcol_location;
+
+	//glfwSetErrorCallback(error_callback);
+
+	if (!glfwInit())
+		exit(EXIT_FAILURE);
+
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); //Request a specific OpenGL version
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3); //Request a specific OpenGL version
 	glfwWindowHint(GLFW_SAMPLES, 16); //Request 4x antialiasing
-	glEnable(GL_MULTISAMPLE);
+
 
 	window = glfwCreateWindow(640, 360, "2D Lighting", NULL, NULL);
 
@@ -441,41 +499,12 @@ void initProgram() {
 	}
 
 	glfwMakeContextCurrent(window);
-	glewExperimental = GL_TRUE;
-	GLenum err = glewInit();
-	if (err != GLEW_OK)
-	{
-		fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
-		glfwTerminate();
-		exit(-1);
-	}
+	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+	glEnable(GL_MULTISAMPLE);
 }
 
 
-
-void CreateShader(GLuint &shader_object, char* filename, GLenum shadertype) {
-	shader_object = glCreateShader(shadertype);
-	std::string fileText = LoadFile(filename);
-	std::string shaderVersion = "#version 330";
-	std::string s = shaderVersion + "\n" + fileText;
-	char const * source = s.c_str();
-	glShaderSource(shader_object, 1, &source, NULL);
-	glCompileShader(shader_object);
-
-
-	GLint status;
-	glGetShaderiv(shader_object, GL_COMPILE_STATUS, &status);
-	if (!status) {
-		int InfoLogLength;
-		glGetShaderiv(shader_object, GL_INFO_LOG_LENGTH, &InfoLogLength);
-		std::vector<char> FragmentShaderErrorMessage(InfoLogLength);
-		glGetShaderInfoLog(shader_object, InfoLogLength, NULL, &FragmentShaderErrorMessage[0]);
-		fprintf(stdout, "Error %s: %s\n", filename, &FragmentShaderErrorMessage[0]);
-		return;
-	}
-}
-
-void CompileProgram(GLuint &program_id, char* vertexshader_filename, char* fragmentshader_filename) {
+void CompileProgram(GLuint& program_id, const char* vertexshader_filename, const char* fragmentshader_filename) {
 	GLuint vertexshader_object, fragmentshader_object;
 
 	CreateShader(vertexshader_object, vertexshader_filename, GL_VERTEX_SHADER);
@@ -493,3 +522,45 @@ void CompileProgram(GLuint &program_id, char* vertexshader_filename, char* fragm
 	glDeleteShader(fragmentshader_object);
 }
 
+void BobsBurgers(GLuint& program_id, const char* vertexshader_filename, const char* fragmentshader_filename) {
+	GLuint vertexshader_object, fragmentshader_object;
+
+	CreateShader(vertexshader_object, vertexshader_filename, GL_VERTEX_SHADER);
+	CreateShader(fragmentshader_object, fragmentshader_filename, GL_FRAGMENT_SHADER);
+
+	program_id = glCreateProgram();
+
+	glAttachShader(program_id, vertexshader_object);
+	glAttachShader(program_id, fragmentshader_object);
+
+	glLinkProgram(program_id);
+	glUseProgram(program_id);
+
+	glDeleteShader(vertexshader_object);
+	glDeleteShader(fragmentshader_object);
+}
+
+
+
+
+void CreateShader(GLuint& shader_object, const char* filename, GLenum shadertype) {
+	shader_object = glCreateShader(shadertype);
+	std::string fileText = LoadFile(filename);
+	std::string shaderVersion = "#version 330";
+	std::string s = shaderVersion + "\n" + fileText;
+	char const* source = s.c_str();
+	glShaderSource(shader_object, 1, &source, NULL);
+	glCompileShader(shader_object);
+
+
+	GLint status;
+	glGetShaderiv(shader_object, GL_COMPILE_STATUS, &status);
+	if (!status) {
+		int InfoLogLength;
+		glGetShaderiv(shader_object, GL_INFO_LOG_LENGTH, &InfoLogLength);
+		std::vector<char> FragmentShaderErrorMessage(InfoLogLength);
+		glGetShaderInfoLog(shader_object, InfoLogLength, NULL, &FragmentShaderErrorMessage[0]);
+		fprintf(stdout, "Error %s: %s\n", filename, &FragmentShaderErrorMessage[0]);
+		return;
+	}
+}
