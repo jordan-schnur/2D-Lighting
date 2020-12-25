@@ -60,37 +60,6 @@ static GLfloat verts[] = { 0, 0, width, 0,width, 0, width, height ,width, height
 GLfloat points[] = { 0, 0, 640, 0, 640, 360, 0, 360, 100, 150, 120, 50, 200, 80, 140, 210, 100, 200, 120, 250, 60, 300, 200, 260, 220, 150, 300, 200, 350, 320, 340, 60, 360, 40, 370, 70, 450, 190, 560, 170, 540, 270, 430, 290, 400, 95, 580, 50, 480, 150, };
 GLfloat lines[100 * 6];
 
-static const struct
-{
-	float x, y;
-	float r, g, b;
-} vertices[3] =
-{
-	{ -0.6f, -0.4f, 1.f, 0.f, 0.f },
-	{  0.6f, -0.4f, 0.f, 1.f, 0.f },
-	{   0.f,  0.6f, 0.f, 0.f, 1.f }
-};
-
-static const char* vertex_shader_text =
-"#version 110\n"
-"uniform mat4 MVP;\n"
-"attribute vec3 vCol;\n"
-"attribute vec2 vPos;\n"
-"varying vec3 color;\n"
-"void main()\n"
-"{\n"
-"    gl_Position = MVP * vec4(vPos, 0.0, 1.0);\n"
-"    color = vCol;\n"
-"}\n";
-
-static const char* fragment_shader_text =
-"#version 110\n"
-"varying vec3 color;\n"
-"void main()\n"
-"{\n"
-"    gl_FragColor = vec4(color, 1.0);\n"
-"}\n";
-
 static void error_callback(int error, const char* description)
 {
 	fprintf(stderr, "Error: %s\n", description);
@@ -389,11 +358,9 @@ glm::vec3 GetIntersection(glm::vec2 Ray1, glm::vec2 Ray2, glm::vec2 Point1, glm:
 
 }
 
-void BobsBurgers(GLuint& program_id, const char* vertexshader_filename, const char* fragmentshader_filename);
-
 Program createSceneProgram() {
 	Program program;
-	BobsBurgers(program.program_id, "main.vert", "main.frag");
+	CompileProgram(program.program_id, "main.vert", "main.frag");
 	glGenVertexArrays(1, &program.vao);
 	glGenVertexArrays(1, &program.vao2);
 
@@ -432,7 +399,7 @@ Program createSceneProgram() {
 
 Program createScreenProgram() {
 	Program program;
-	BobsBurgers(program.program_id, "post.vert", "post.frag");
+	CompileProgram(program.program_id, "post.vert", "post.frag");
 	glGenVertexArrays(1, &program.vao);
 	glBindVertexArray(program.vao);
 	glGenBuffers(1, &program.vbo);
@@ -521,26 +488,6 @@ void CompileProgram(GLuint& program_id, const char* vertexshader_filename, const
 	glDeleteShader(vertexshader_object);
 	glDeleteShader(fragmentshader_object);
 }
-
-void BobsBurgers(GLuint& program_id, const char* vertexshader_filename, const char* fragmentshader_filename) {
-	GLuint vertexshader_object, fragmentshader_object;
-
-	CreateShader(vertexshader_object, vertexshader_filename, GL_VERTEX_SHADER);
-	CreateShader(fragmentshader_object, fragmentshader_filename, GL_FRAGMENT_SHADER);
-
-	program_id = glCreateProgram();
-
-	glAttachShader(program_id, vertexshader_object);
-	glAttachShader(program_id, fragmentshader_object);
-
-	glLinkProgram(program_id);
-	glUseProgram(program_id);
-
-	glDeleteShader(vertexshader_object);
-	glDeleteShader(fragmentshader_object);
-}
-
-
 
 
 void CreateShader(GLuint& shader_object, const char* filename, GLenum shadertype) {
